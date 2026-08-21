@@ -1,0 +1,681 @@
+================================================================================
+                     CATCHQ PROJECT - COMPLETE TECHNICAL SPECIFICATION
+                              For AI/Agent Rebuild Instructions
+================================================================================
+
+================================================================================
+                              PROJECT OVERVIEW
+================================================================================
+
+Project Name: CatchQ
+Description: A clinic queue management system with web admin dashboard and
+             mobile appointment booking.
+Architecture: 
+  - Frontend: Next.js 15 (App Router) with TypeScript
+  - Backend: NestJS with TypeORM
+  - Database: PostgreSQL
+  - Auth: Firebase Authentication (JWT)
+  - Real-time: Socket.io for live queue updates
+  - UI: shadcn/ui + Tailwind CSS
+
+Projects in Repository:
+1. catchq-landing/    - Marketing landing page (Next.js)
+2. clinic-backend/   - REST API + WebSocket (NestJS)
+3. final-frontend/   - Admin dashboard (Next.js 15)
+4. clinic-management-system/ - Legacy/incomplete version
+
+================================================================================
+                              DATABASE SCHEMA
+================================================================================
+
+DATABASE: PostgreSQL
+CONNECTION: Via environment variable DATABASE_URL
+
+================================================================================
+TABLE: clinics
+================================================================================
+Primary Key: id (VARCHAR, UUID or manual string)
+Columns:
+  - id: VARCHAR (PK)
+  - name: VARCHAR (NOT NULL)
+  - address: VARCHAR (NOT NULL)
+  - phone: VARCHAR (NOT NULL)
+  - email: VARCHAR (UNIQUE, NOT NULL)
+  - created_at: TIMESTAMP WITH TIME ZONE (auto)
+
+Relationships:
+  - One-to-Many with doctors
+
+================================================================================
+TABLE: doctors
+================================================================================
+Primary Key: id (UUID, auto-generated)
+Columns:
+  - id: UUID (PK, auto-generated)
+  - clinic_id: UUID (FK to clinics.id, NOT NULL)
+  - name: VARCHAR (NOT NULL)
+  - gender: VARCHAR (NOT NULL)
+  - specialty: VARCHAR (NOT NULL)
+  - qualification: VARCHAR (nullable)
+  - phone: VARCHAR (nullable)
+  - email: VARCHAR (nullable)
+  - date_of_birth: DATE (nullable)
+  - experience_years: INT (nullable)
+  - avatar_url: VARCHAR (nullable)
+  - created_at: TIMESTAMP WITH TIME ZONE (auto)
+
+Relationships:
+  - Many-to-One with clinic
+  - One-to-Many with doctor_schedules
+
+================================================================================
+TABLE: doctor_schedules
+================================================================================
+Primary Key: id (UUID, auto-generated)
+Columns:
+  - id: UUID (PK, auto-generated)
+  - day_of_week: VARCHAR (NOT NULL) - e.g., "Monday", "Tuesday"
+  - start_time: TIME WITHOUT TIME ZONE (NOT NULL) - format "HH:MM:SS"
+  - end_time: TIME WITHOUT TIME ZONE (NOT NULL) - format "HH:MM:SS"
+  - doctor_id: UUID (FK to doctors.id, NOT NULL)
+  - fees: NUMERIC (default 0)
+  - booking_start: TIME (default "00:00:00")
+  - booking_end: TIME (default "23:59:00")
+  - booking_window: BOOLEAN (default true)
+  - max_queue: INT (default 5)
+  - created_at: TIMESTAMP WITH TIME ZONE (auto)
+
+Relationships:
+  - Many-to-One with doctor
+  - One-to-Many with appointments
+
+================================================================================
+TABLE: patients
+================================================================================
+Primary Key: id (VARCHAR, manual - typically phone number or UUID)
+Columns:
+  - id: VARCHAR (PK)
+  - phone_number: VARCHAR (UNIQUE, NOT NULL)
+  - full_name: VARCHAR (nullable)
+  - gender: VARCHAR (nullable)
+  - dob: DATE (nullable)
+  - is_profile_complete: BOOLEAN (default false)
+  - firebase_uid: VARCHAR (UNIQUE, nullable) - Firebase UID for mobile auth
+  - created_at: TIMESTAMP (auto)
+  - updated_at: TIMESTAMP (auto)
+
+Relationships:
+  - One-to-Many with family_members
+  - One-to-Many with appointments
+
+================================================================================
+TABLE: family_members
+================================================================================
+Primary Key: id (UUID, auto-generated)
+Columns:
+  - id: UUID (PK, auto-generated)
+  - patient_id: VARCHAR (FK to patients.id, NOT NULL)
+  - name: VARCHAR (NOT NULL)
+  - gender: VARCHAR (NOT NULL)
+  - dob: DATE (NOT NULL)
+  - relation: VARCHAR (NOT NULL) - e.g., "Son", "Daughter", "Wife"
+  - created_at: TIMESTAMP (auto)
+  - updated_at: TIMESTAMP (auto)
+
+Relationships:
+  - Many-to-One with patient
+  - One-to-Many with appointments
+
+================================================================================
+TABLE: appointments
+================================================================================
+Primary Key: id (UUID, auto-generated)
+Columns:
+  - id: UUID (PK, auto-generated)
+  - patient_id: VARCHAR (FK to patients.id, nullable)
+  - family_member_id: UUID (FK to family_members.id, nullable)
+  - schedule_id: UUID (FK to doctor_schedules.id, NOT NULL)
+  - queue_number: INT (default 0) - position in queue
+  - date: DATE (NOT NULL) - format "YYYY-MM-DD"
+  - status: TEXT (default 'waiting') - enum: waiting, serving, completed, cancelled, skipped
+  - source: TEXT (default 'mobile') - "mobile" or "web"
+  - created_at: TIMESTAMP WITH TIME ZONE (auto)
+  - updated_at: TIMESTAMP WITH TIME ZONE (auto)
+
+Relationships:
+  - Many-to-One with patient (nullable)
+  - Many-to-One with family_member (nullable)
+  - Many-to-One with doctor_schedule
+
+================================================================================
+                              BACKEND API ENDPOINTS
+================================================================================
+
+BASE URL: /api
+AUTHENTICATION: Firebase JWT Bearer token in Authorization header
+ALL PROTECTED ROUTES require @UseGuards(FirebaseAuthGuard)
+
+================================================================================
+AUTH MODULE (/src/auth)
+================================================================================
+- Firebase Strategy: Validates Firebase JWT tokens
+- Guard: FirebaseAuthGuard - protects all authenticated routes
+- Firebase Config: Initialized in main.ts with project credentials
+
+================================================================================
+PATIENTS MODULE (/src/patients)
+================================================================================
+POST /patients
+  - Create or get existing patient
+  - Body: { phone_number: "+911234567890", fullName?: string, gender?: string, dob?: string }
+  - Response: { success: true, data: patient }
+
+GET /patients/:id
+  - Get patient by ID
+  - Auth required (user.uid must match patient.id)
+  - Response: { success: true, data: patient }
+
+PATCH /patients/:id
+  - Update patient profile
+  - Body: { fullName?: string, gender?: string, dob?: string }
+  - Response: { success: true, data: updatedPatient }
+
+GET /patients/search/:phone
+  - Search patient by phone number
+  - Phone format: +91XXXXXXXXXX (10 digits after +91)
+  - Response: { success: true, data: patient | null }
+
+POST /patients/:id/family-members
+  - Add family member to patient
+  - Body: { name: string, gender: string, dob: string, relation: string }
+  - Response: { success: true, data: familyMember }
+
+================================================================================
+DOCTORS MODULE (/src/doctors)
+================================================================================
+GET /doctors/public
+  - Public endpoint - list all doctors (for mobile browsing)
+  - Response: { success: true, data: doctors[] }
+
+GET /doctors/queue
+  - Get queue overview for all doctors
+  - Response: { success: true, data: doctorQueue[] }
+
+POST /doctors
+  - Create new doctor (clinic admin only)
+  - Auth required
+  - Body: { name, gender, specialty, email?, qualification?, phone?, dateOfBirth?, avatarUrl?, experienceYears? }
+  - Response: { success: true, data: doctor }
+
+GET /doctors
+  - List doctors for current clinic
+  - Auth required
+  - Response: { success: true, data: doctors[] }
+
+GET /doctors/:id
+  - Get doctor profile with all schedules
+  - Response: { success: true, data: doctorWithSchedules }
+
+PATCH /doctors/:id
+  - Update doctor details
+  - Auth required
+  - Body: { name?, gender?, specialty?, email?, qualification?, phone?, dateOfBirth?, avatarUrl?, experienceYears? }
+  - Response: { success: true, data: updatedDoctor }
+
+DELETE /doctors/:id
+  - Delete doctor and all schedules
+  - Auth required
+  - Response: { success: true }
+
+POST /doctors/:id/schedules
+  - Add availability slot for doctor
+  - Auth required
+  - Body: { dayOfWeek: string, startTime: string, endTime: string, maxQueue?: number }
+  - Example: { dayOfWeek: "Monday", startTime: "09:00", endTime: "17:00", maxQueue: 10 }
+  - Response: { success: true, data: schedule }
+
+PATCH /doctors/:id/schedules/:scheduleId
+  - Update a schedule slot
+  - Auth required
+  - Body: { dayOfWeek?, startTime?, endTime?, maxQueue? }
+  - Response: { success: true, data: updatedSchedule }
+
+DELETE /doctors/:id/schedules/:scheduleId
+  - Delete a schedule slot
+  - Auth required
+  - Response: { success: true }
+
+GET /doctors/clinic/queue
+  - Get doctors with real-time queue info for clinic
+  - Auth required
+  - Response: { success: true, data: doctorsWithQueue[] }
+
+================================================================================
+APPOINTMENTS MODULE (/src/appointments)
+================================================================================
+POST /appointments/book
+  - Book an appointment (mobile or web)
+  - Auth required
+  - Body: { patientId?: string, familyMemberId?: string, newMember?: object, scheduleId: string, date: string, source?: string }
+  - Example: { patientId: "uuid", scheduleId: "uuid", date: "2024-01-15", source: "web" }
+  - Response: { success: true, data: appointment }
+
+GET /appointments/patient/:id
+  - Get all appointments for a patient/family member
+  - Response: { success: true, data: appointments[] }
+
+GET /appointments/schedule/:scheduleId/:date
+  - Get queue status for a schedule on a date
+  - Response: { success: true, data: queueStatus }
+
+PATCH /appointments/:id/status
+  - Update appointment status
+  - Body: { status: "waiting" | "serving" | "completed" }
+  - Response: { success: true, data: updatedAppointment }
+
+GET /appointments?scheduleId=&date=
+  - Get appointments for a schedule on a date
+  - Query params: scheduleId (required), date (required)
+  - Response: { success: true, data: appointments[] }
+
+GET /appointments/clinic?date=&doctorId=
+  - Get all appointments for a clinic
+  - Auth required
+  - Query params: date (optional), doctorId (optional)
+  - Response: { success: true, data: appointments[] }
+
+================================================================================
+QUEUE MODULE (/src/queue)
+================================================================================
+GET /api/doctors/queue
+  - Get doctors queue for clinic
+  - Auth required
+  - Response: { success: true, data: doctorsQueue[] }
+
+POST /api/doctors/queue
+  - Add patient to queue
+  - Auth required
+  - Body: { patientId, scheduleId, ... }
+  - Response: { success: true, data: appointment }
+
+================================================================================
+WEBSOCKET GATEWAY (/src/app.gateway)
+================================================================================
+Socket.io server running on same port as HTTP server (3000)
+
+Events:
+- emit: `queue-updated-{scheduleId}-{date}` - broadcast when queue changes
+- emit: `status-update` - broadcast appointment status changes
+- on: connection - handle client connections
+- on: subscribe-queue - subscribe to specific queue updates
+
+================================================================================
+                              FRONTEND PAGES
+================================================================================
+
+BASE: http://localhost:3001 (or configurable via NEXT_PUBLIC_API_URL)
+
+================================================================================
+AUTH & LAYOUT
+================================================================================
+- /login - Clinic admin login page
+  - Email/password authentication
+  - Uses Firebase Auth
+  - Redirects to /dashboard on success
+
+- Layout component: @/components/layout
+  - Sidebar navigation
+  - Header with clinic info
+  - Protected routes
+
+- Auth Provider: @/components/auth-provider
+  - Manages clinic/user state
+  - Provides login(), logout(), clinic, user
+
+================================================================================
+PAGES
+================================================================================
+
+1. /dashboard
+   - Stats cards: Total Patients Today, Appointments Today, Currently Waiting,
+     Completed Today, Doctors Available, Performance
+   - Charts: Appointments Trend (7 days LineChart), Completed vs Waiting (BarChart)
+   - Quick Actions: Add Patient, View Queue, Schedule Appointment, Manage Doctors
+   - Recent Activity feed
+
+2. /queue (Queue Management)
+   - Doctor dropdown selector
+   - Day selector (next 7 days)
+   - Time slot management (add/edit/delete slots)
+   - Patient queue table with columns:
+     - Queue No.
+     - Patient Name
+     - Phone
+     - Sex
+     - Status (serving/waiting/completed/skipped/cancelled)
+     - Source (web/mobile)
+   - Status change actions: Call Next, Mark Serving, Complete, Skip, Cancel
+   - Add Patient form:
+     - Phone verification
+     - Patient exists check
+     - Family member selection
+     - New patient registration
+     - Doctor & slot selection
+   - Real-time updates via Socket.io
+
+3. /appointments
+   - Table view of all appointments
+   - Filter by date, doctor, status
+   - Uses AppointmentTable component
+
+4. /doctors
+   - Doctors table with columns: Name, Specialty, Contact, Actions
+   - Tabs by specialty
+   - Search functionality
+   - Create Doctor dialog (name, gender, specialty, email, qualification, phone, DOB, experience)
+   - Edit Doctor dialog
+   - Schedule management dialog (weekly schedule with time slots per day)
+
+5. /billing
+   - Billing table with filters (doctor, date, search)
+   - Columns: Queue No., Patient Name, Phone, Sex, Doctor, Date, Amount, Status, Actions
+   - Generate Bill modal (select patient, schedule, amount, payment mode, discount, notes)
+   - Bill Details modal
+   - Print Bill modal (print-friendly invoice)
+
+6. /settings
+   - Clinic profile settings
+   - Change password
+   - Other configuration options
+
+================================================================================
+                              ENVIRONMENT VARIABLES
+================================================================================
+
+================================================================================
+BACKEND (.env)
+================================================================================
+DATABASE_URL=postgresql://user:password@host:port/database
+FIREBASE_PROJECT_ID=your-firebase-project-id
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n..."
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk@project.iam.gserviceaccount.com
+
+================================================================================
+FRONTEND (.env.local)
+================================================================================
+NEXT_PUBLIC_API_URL=http://localhost:3000/api
+NEXT_PUBLIC_FIREBASE_API_KEY=your-api-key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=123456789
+NEXT_PUBLIC_FIREBASE_APP_ID=1:123456789:web:abc123
+
+================================================================================
+                              KEY COMPONENTS & FILES
+================================================================================
+
+================================================================================
+BACKEND STRUCTURE (clinic-backend/src)
+================================================================================
+main.ts                     - App bootstrap, Firebase init, DB connection test
+app.module.ts               - Root module, TypeORM config, imports all modules
+app.gateway.ts              - Socket.io WebSocket gateway for real-time updates
+
+/config/
+  env.validation.ts         - Environment validation
+  config.module.ts         - Config module
+  config.service.ts        - Config service
+
+/auth/
+  auth.module.ts           - Auth module
+  firebase.strategy.ts     - Passport Firebase JWT strategy
+  firebase-auth.guard.ts   - Auth guard
+  firebase.config.ts       - Firebase admin initialization
+
+/entities/                  - TypeORM entities
+  clinic.entity.ts
+  doctor.entity.ts
+  doctor-schedule.entity.ts
+  patient.entity.ts
+  family-member.entity.ts
+  appointment.entity.ts
+
+/appointments/
+  appointments.module.ts
+  appointments.controller.ts
+  appointments.service.ts
+  followup.service.ts
+  followup.controller.ts
+  followup-reminder.service.ts
+  dto/
+    create-appointment.dto.ts
+    update-appointment.dto.ts
+    appointment-response.dto.ts
+    get-by-schedule.dto.ts
+
+/patients/
+  patients.module.ts
+  patients.controller.ts
+  patients.service.ts
+  dto/
+    create-patient.dto.ts
+    update-patient.dto.ts
+    create-family-member.dto.ts
+
+/doctors/
+  doctors.module.ts
+  doctors.controller.ts
+  doctors.service.ts
+  doctor-schedule.service.ts
+  doctor-schedule.controller.ts
+  dto/
+    create-doctor.dto.ts
+    update-doctor.dto.ts
+    create-doctor-schedule.dto.ts
+    update-doctor-schedule.dto.ts
+
+/queue/
+  queue.module.ts
+  queue.controller.ts
+  queue.service.ts
+  dto/
+    create-queue.dto.ts
+
+/clinics/
+  clinics.module.ts
+  clinics.controller.ts
+  clinics.service.ts
+  dto/
+    create-clinic.dto.ts
+    login-clinic.dto.ts
+    change-password.dto.ts
+    doctor.dto.ts
+    time-slot.dto.ts
+
+/migrations/               - TypeORM migrations
+  1749280452834-InitialSchemaSetup.ts
+  1749318664996-AddPatientTable.ts
+  1749400000000-AddUniqueAppointmentPerEntity.ts
+
+================================================================================
+FRONTEND STRUCTURE (final-frontend)
+================================================================================
+app/
+  layout.tsx               - Root layout with auth provider
+  page.tsx                 - Redirect or landing
+  globals.css              - Global styles
+  login/page.tsx           - Login page
+  dashboard/page.tsx       - Dashboard with stats & charts
+  queue/page.tsx           - Queue management (main complex page)
+  appointments/page.tsx   - Appointments list
+  doctors/page.tsx         - Doctors management
+  billing/page.tsx         - Billing & payments
+  settings/page.tsx        - Settings page
+  loading.tsx              - Loading states
+  doctors/loading.tsx
+  appointments/loading.tsx
+
+components/
+  layout.tsx               - Main layout with sidebar
+  auth-provider.tsx        - Auth context provider
+  ui/                      - shadcn/ui components
+    button.tsx, input.tsx, dialog.tsx, select.tsx, etc.
+  appointment-table.tsx    - Appointments table component
+  follow-up-form.tsx       - Follow-up booking form
+  date-picker-patients.tsx - Date picker component
+  ... (various other components)
+
+lib/
+  utils.ts                 - Utility functions (cn helper)
+  utils/time-utils.ts      - Time formatting utilities
+
+firebase.ts                - Firebase client initialization
+hooks/
+  use-toast.ts             - Toast notifications
+  use-mobile.tsx           - Mobile detection hook
+
+public/
+  careq-logo.jpg
+  medical-background.jpg
+  placeholder images
+
+================================================================================
+                              TECHNICAL IMPLEMENTATION NOTES
+================================================================================
+
+1. AUTHENTICATION FLOW
+   - Web: Clinic admin logs in via email/password (Firebase Auth)
+   - Mobile: Patients log in via phone OTP (Firebase Auth)
+   - Backend validates Firebase JWT tokens
+   - Token passed in Authorization header: "Bearer <token>"
+
+2. QUEUE NUMBER ASSIGNMENT
+   - When appointment created, queue_number = count of existing + 1
+   - Or: max(existing queue_numbers) + 1
+
+3. STATUS FLOW
+   waiting -> serving -> completed
+   waiting -> skipped
+   waiting -> cancelled
+
+4. REAL-TIME UPDATES
+   - Socket.io connection on queue page
+   - Listen to: `queue-updated-{scheduleId}-{date}`
+   - Server emits on any appointment status change
+
+5. FAMILY MEMBERS
+   - Patient can have multiple family members
+   - Each family member can book separate appointments
+   - Family member appointments linked via family_member_id
+
+6. SCHEDULE TIME FORMAT
+   - Stored as "HH:MM:SS" in database
+   - Frontend displays as "HH:MM" (slice last 3 chars)
+   - Booking window: time range when online booking allowed
+
+7. PAGINATION & FILTERS
+   - Dashboard fetches 7-day trend data
+   - Queue filters by doctor, day, slot
+   - Billing filters by doctor, date, search
+
+================================================================================
+                              BUILD & RUN COMMANDS
+================================================================================
+
+BACKEND (clinic-backend):
+  npm install
+  npm run build
+  npm run start:dev        # Development with watch
+  npm run start:prod       # Production
+  npm run migration:run    # Run TypeORM migrations
+  npm run migration:generate # Generate new migration
+
+FRONTEND (final-frontend):
+  npm install
+  npm run dev              # Development server on port 3001
+  npm run build           # Production build
+  npm run start           # Production server
+  npm run lint            # Linting
+
+LANDING PAGE (catchq-landing):
+  npm install
+  npm run dev             # Development
+  npm run build           # Production
+
+================================================================================
+                              KEY BUSINESS LOGIC
+================================================================================
+
+1. PATIENT PHONE NORMALIZATION
+   - All phone numbers normalized to +91XXXXXXXXXX format
+   - Search strips non-digits, takes last 10 digits
+
+2. SCHEDULE DAY MATCHING
+   - Backend stores "Monday", "Tuesday", etc.
+   - Frontend converts current day to match
+
+3. APPOINTMENT UNIQUE CONSTRAINT
+   - One appointment per patient/family_member per schedule per date
+   - Prevent duplicate bookings
+
+4. QUEUE REORDERING
+   - On status change, maintain queue order
+   - Reopening skipped patient inserts at position 3
+
+5. FEES & PAYMENTS
+   - Doctor schedule includes fees per consultation
+   - Billing tracks payment status (paid/unpaid)
+   - Payment modes: Cash, Card, UPI, etc.
+
+================================================================================
+                              POSSIBLE IMPROVEMENTS/ISSUES TO FIX
+================================================================================
+
+1. Auth provider needs proper logout handling
+2. Some DTOs missing proper validation decorators
+3. No pagination on large dataset queries
+4. Missing proper error handling middleware
+5. No rate limiting on API endpoints
+6. Consider adding refresh token mechanism
+7. Add proper logging service
+8. Consider adding caching layer
+9. Add unit tests and e2e tests
+10. Mobile app not fully implemented (separate project needed)
+
+================================================================================
+                              DOCUMENTATION FOR AI REBUILD
+================================================================================
+
+When using AI/coding agents to rebuild this project:
+
+1. START WITH DATABASE
+   - Set up PostgreSQL database
+   - Create entities matching schema above
+   - Run migrations
+
+2. BACKEND FIRST
+   - Set up NestJS project
+   - Add Firebase auth
+   - Implement modules in order: auth, clinics, doctors, patients, appointments, queue
+   - Test each endpoint with Postman/curl
+
+3. FRONTEND SECOND
+   - Set up Next.js 15 project with shadcn/ui
+   - Create auth provider and layout
+   - Build pages in order: login, dashboard, then others
+   - Connect to backend APIs
+
+4. TESTING
+   - Use Firebase Emulator for local auth testing
+   - Use PostgreSQL for database testing
+   - Test WebSocket real-time updates
+
+5. DEPLOYMENT
+   - Backend: Render, Railway, or similar
+   - Frontend: Vercel
+   - Database: Neon, Supabase, or similar
+
+================================================================================
+                              END OF SPECIFICATION
+================================================================================

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "81941170026",
+    "project_id": "maa-ce612",
+    "storage_bucket": "maa-ce612.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:81941170026:android:2aa29d6b25f1a2bd934713",
+        "android_client_info": {
+          "package_name": "com.Maa"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAiVyZE_HDOdunVSXYxJ4s15K9ArkAn94M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
