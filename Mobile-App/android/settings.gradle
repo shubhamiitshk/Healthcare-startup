@@ -1,0 +1,4 @@
+rootProject.name = 'Maa'
+include ':app'
+// auto-link all @react-native-*/android modules:
+apply from: file("../node_modules/react-native/cli-platform-android/native_modules.gradle")

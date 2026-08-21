@@ -1,0 +1,10 @@
+<resources>
+    <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+        <!-- Set the navigation bar background color to white -->
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:navigationBarColor">@android:color/white</item>
+
+        <!-- Ensure navigation bar buttons/icons are dark -->
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>
