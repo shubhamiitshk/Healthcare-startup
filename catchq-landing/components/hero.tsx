@@ -32,21 +32,27 @@ export function Hero() {
           <div
             className={`flex flex-col sm:flex-row gap-6 justify-center transition-all duration-800 ease-out delay-200 ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}
           >
-            <Button
-              size="lg"
-              className="bg-[#1BBA8B] hover:bg-[#0ea574] text-white text-lg px-10 py-4 h-14 transition-all duration-300 hover:scale-105 hover:shadow-xl transform rounded-full font-medium"
+            <a
+              href={process.env.NEXT_PUBLIC_REGISTER_URL || "http://localhost:3003"}
             >
-              Get Free Demo for Your Clinic
-              <ArrowRight className="w-5 h-5 ml-2 transition-transform duration-300 group-hover:translate-x-1" />
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="text-lg px-10 py-4 h-14 border-2 border-gray-300 text-gray-700 hover:bg-gray-50 bg-transparent transition-all duration-300 hover:scale-105 transform rounded-full font-medium"
-            >
-              <Play className="w-5 h-5 mr-2 transition-transform duration-300 group-hover:scale-110" />
-              See How It Works
-            </Button>
+              <Button
+                size="lg"
+                className="bg-[#1BBA8B] hover:bg-[#0ea574] text-white text-lg px-10 py-4 h-14 transition-all duration-300 hover:scale-105 hover:shadow-xl transform rounded-full font-medium"
+              >
+                Get Free Demo for Your Clinic
+                <ArrowRight className="w-5 h-5 ml-2 transition-transform duration-300 group-hover:translate-x-1" />
+              </Button>
+            </a>
+            <a href="#how-it-works">
+              <Button
+                size="lg"
+                variant="outline"
+                className="text-lg px-10 py-4 h-14 border-2 border-gray-300 text-gray-700 hover:bg-gray-50 bg-transparent transition-all duration-300 hover:scale-105 transform rounded-full font-medium"
+              >
+                <Play className="w-5 h-5 mr-2 transition-transform duration-300 group-hover:scale-110" />
+                See How It Works
+              </Button>
+            </a>
           </div>
         </div>
       </div>

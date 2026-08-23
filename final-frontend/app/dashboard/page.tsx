@@ -147,7 +147,7 @@ export default function DashboardPage() {
       icon: <Users className="h-4 w-4 text-[#1BBA8D]" />, 
       value: loading ? "-" : animatedPatients,
       tooltip: "Unique patients with appointments today.",
-      onClick: () => router.push("/patients"),
+      onClick: () => router.push("/appointments"),
       interactive: true,
     },
     {

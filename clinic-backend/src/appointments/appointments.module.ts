@@ -14,6 +14,7 @@ import { FamilyMember } from '../entities/family-member.entity';
 import { DoctorSchedule } from '../entities/doctor-schedule.entity';
 import { FollowUp } from './entities/followup.entity';
 import { GatewayModule } from '../gateway.module';
+import { WhatsappModule } from '../whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { GatewayModule } from '../gateway.module';
       FollowUp,
     ]),
     forwardRef(() => GatewayModule),
+    WhatsappModule,
   ],
   controllers: [AppointmentsController, FollowUpController],
   providers: [AppointmentsService, FollowUpService, FollowUpReminderService],

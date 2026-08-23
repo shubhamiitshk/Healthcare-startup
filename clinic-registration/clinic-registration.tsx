@@ -43,6 +43,8 @@ function hasOverlap(slots: TimeSlot[]): boolean {
 }
 
 export default function ClinicRegistration() {
+  const [isRegistered, setIsRegistered] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [clinicData, setClinicData] = useState({
     name: "",
     address: "",
@@ -170,8 +172,7 @@ export default function ClinicRegistration() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    
+    setIsSubmitting(true)
 
     try {
       // Transform the data to match our backend DTO structure
@@ -199,25 +200,21 @@ export default function ClinicRegistration() {
         })),
       }
 
-      const response = await fetch(
-        "http://localhost:3000/api/clinics/register",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestData),
-        }
-      )
+      const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
+      const response = await fetch(`${API_URL}/clinics/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestData),
+      })
 
       const data = await response.json()
       if (!response.ok) {
         throw new Error(data.message || "Registration failed")
       }
 
-      alert(
-        "Clinic registration successful! You can now login with your email and password."
-      )
+      setIsRegistered(true)
     } catch (error) {
       console.error("Registration error:", error)
       if (error instanceof Error) {
@@ -225,7 +222,32 @@ export default function ClinicRegistration() {
       } else {
         alert("Registration failed. Please try again.")
       }
+    } finally {
+      setIsSubmitting(false)
     }
+  }
+
+  if (isRegistered) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: "#f8fafc" }}>
+        <Card className="max-w-md w-full text-center p-8 border-2" style={{ borderColor: "#1BBA8B" }}>
+          <div className="w-16 h-16 bg-[#1BBA8B]/10 text-[#1BBA8B] rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
+            ✓
+          </div>
+          <h2 className="text-2xl font-bold mb-2 text-[#164772]">Registration Successful!</h2>
+          <p className="text-gray-600 mb-6">
+            Your clinic <strong>{clinicData.name}</strong> and doctor schedules have been successfully registered.
+          </p>
+          <a
+            href={process.env.NEXT_PUBLIC_ADMIN_URL ? `${process.env.NEXT_PUBLIC_ADMIN_URL}/login` : "http://localhost:3002/login"}
+          >
+            <Button className="w-full bg-[#164772] hover:bg-[#123657] text-white py-3 text-lg">
+              Proceed to Admin Login
+            </Button>
+          </a>
+        </Card>
+      </div>
+    )
   }
 
   return (

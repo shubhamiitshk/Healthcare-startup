@@ -1,0 +1,28 @@
+{
+  "name": "catchq-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CatchQ Healthcare Clinic & Queue Management Ecosystem",
+  "workspaces": [
+    "clinic-backend",
+    "final-frontend",
+    "catchq-landing",
+    "clinic-registration"
+  ],
+  "scripts": {
+    "dev": "npm run dev:all",
+    "dev:all": "concurrently -k -n \"BACKEND,ADMIN,LANDING,REGISTER\" -c \"bgBlue.bold,bgGreen.bold,bgMagenta.bold,bgYellow.bold\" \"npm run start:dev --workspace=clinic-backend\" \"npm run dev --workspace=final-frontend\" \"npm run dev --workspace=catchq-landing\" \"npm run dev --workspace=clinic-registration\"",
+    "dev:backend": "npm run start:dev --workspace=clinic-backend",
+    "dev:admin": "npm run dev --workspace=final-frontend",
+    "dev:landing": "npm run dev --workspace=catchq-landing",
+    "dev:register": "npm run dev --workspace=clinic-registration",
+    "build:all": "npm run build --workspaces",
+    "typecheck": "concurrently \"npx --workspace=clinic-backend tsc --noEmit\" \"npx --workspace=final-frontend tsc --noEmit\" \"npx --workspace=catchq-landing tsc --noEmit\" \"npx --workspace=clinic-registration tsc --noEmit\"",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

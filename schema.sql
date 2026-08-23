@@ -112,3 +112,40 @@ CREATE INDEX idx_appointments_schedule_date ON appointments(schedule_id, date);
 CREATE INDEX idx_appointments_patient_id ON appointments(patient_id);
 CREATE INDEX idx_family_members_patient_id ON family_members(patient_id);
 CREATE INDEX idx_patients_phone ON patients(phone_number);
+
+-- 8. INVOICES (billing module)
+CREATE TABLE IF NOT EXISTS invoices (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id VARCHAR NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  patient_id VARCHAR REFERENCES patients(id) ON DELETE SET NULL,
+  appointment_id UUID REFERENCES appointments(id) ON DELETE SET NULL,
+  date DATE NOT NULL,
+  amount NUMERIC(10,2) DEFAULT 0,
+  discount NUMERIC(10,2) DEFAULT 0,
+  payment_mode VARCHAR DEFAULT 'cash',
+  status VARCHAR DEFAULT 'unpaid',
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_invoices_clinic_date ON invoices(clinic_id, date);
+
+-- 9. WHATSAPP MESSAGES (notification log)
+CREATE TABLE IF NOT EXISTS whatsapp_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id VARCHAR NOT NULL DEFAULT 'system',
+  patient_id VARCHAR,
+  appointment_id VARCHAR,
+  wa_message_id VARCHAR UNIQUE,
+  wa_contact_id VARCHAR NOT NULL,
+  type VARCHAR NOT NULL DEFAULT 'text',
+  direction VARCHAR NOT NULL,
+  content TEXT,
+  metadata JSONB,
+  status VARCHAR NOT NULL DEFAULT 'pending',
+  error_message VARCHAR,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_wa_clinic_created ON whatsapp_messages(clinic_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_wa_contact_created ON whatsapp_messages(wa_contact_id, created_at);

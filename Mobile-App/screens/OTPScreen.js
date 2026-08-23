@@ -198,7 +198,7 @@ const OTPScreen = ({ route, navigation }) => {
             {/* Resend OTP */}
             <View style={styles.resendContainer}>
               <Text style={styles.timerText}>
-                00:{`countdown < 10 ? 0${countdown} : countdown`}
+                {countdown < 10 ? `00:0${countdown}` : `00:${countdown}`}
               </Text>
               <TouchableOpacity onPress={handleResendOTP} disabled={isCounting}>
                 <Text style={[styles.resendText, isCounting && styles.disabledText]}>

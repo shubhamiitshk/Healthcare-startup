@@ -28,7 +28,10 @@ async function bootstrap() {
     const dataSource = new DataSource({
       type: 'postgres',
       url: configService.get<string>('DATABASE_URL'),
-      ssl: { rejectUnauthorized: false },
+      ssl:
+        configService.get<string>('DB_SSL') === 'true'
+          ? { rejectUnauthorized: false }
+          : false,
     });
     await dataSource.initialize();
     console.log('Database connection successful');
@@ -38,11 +41,16 @@ async function bootstrap() {
   }
 
   try {
-    if (!admin.apps.length) {
+    if (
+      !admin.apps.length &&
+      configService.get<string>('FIREBASE_PROJECT_ID') &&
+      configService.get<string>('FIREBASE_PRIVATE_KEY') &&
+      configService.get<string>('FIREBASE_CLIENT_EMAIL')
+    ) {
       admin.initializeApp({
         credential: admin.credential.cert({
           projectId: configService.get<string>('FIREBASE_PROJECT_ID'),
-          privateKey: configService.get<string>('FIREBASE_PRIVATE_KEY'),
+          privateKey: configService.get<string>('FIREBASE_PRIVATE_KEY')?.replace(/\\n/g, '\n'),
           clientEmail: configService.get<string>('FIREBASE_CLIENT_EMAIL'),
         }),
       });
@@ -66,6 +74,7 @@ async function bootstrap() {
           'http://localhost:3000',
           'http://localhost:3001',
           'http://localhost:3002',
+          'http://localhost:3003',
         ];
 
   if (isProd && allowedOrigins.length === 0) {

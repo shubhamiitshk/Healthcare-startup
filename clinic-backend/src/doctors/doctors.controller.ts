@@ -29,16 +29,14 @@ export class DoctorsController {
   //
   // ─── PUBLIC ───────────────────────────────────────────────────────────────────
   //
-  /** GET /api/doctors/public  → returns all doctors (for your mobile "browse" screen) */
-  @Get('public')
-  async findAllPublic() {
-    return this.doctorsService.findAllPublic();
-  }
+    /** GET /api/doctors/public  → returns all doctors (for your mobile "browse" screen) */
+    @Get('public')
+    async findAllPublic() {
+        return this.doctorsService.findAllPublic();
+    }
 
-  @Get('queue')
-  async getQueueOverview() {
-    return this.doctorsService.getQueueStatus();
-  }
+    // NOTE: GET /api/doctors/queue is served by QueueController (queue.module)
+    // to avoid a duplicate-route conflict that silently shadowed one handler.
 
   //
   // ─── PROTECTED (all write & clinic-scoped reads) ──────────────────────────────

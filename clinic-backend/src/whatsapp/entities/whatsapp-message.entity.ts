@@ -88,10 +88,10 @@ export class WhatsAppMessage {
   direction: WhatsAppMessageDirection;
 
   @Column({ type: 'text', nullable: true })
-  content: string;
+  content: string | null;
 
   @Column({ type: 'jsonb', nullable: true })
-  metadata: Record<string, any>;
+  metadata: Record<string, any> | null;
 
   @Column({
     type: 'enum',
@@ -101,7 +101,7 @@ export class WhatsAppMessage {
   status: WhatsAppMessageStatus;
 
   @Column({ nullable: true })
-  errorMessage: string;
+  errorMessage: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

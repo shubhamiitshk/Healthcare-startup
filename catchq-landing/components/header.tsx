@@ -81,12 +81,22 @@ export function Header() {
           </nav>
 
           <div className="hidden lg:flex items-center space-x-4">
-            <Button className="bg-[#1BBA8B] hover:bg-[#0ea574] px-6 py-2.5 font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg rounded-full">
-              Get Started
-              <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Button>
+            <a
+              href={process.env.NEXT_PUBLIC_ADMIN_URL ? `${process.env.NEXT_PUBLIC_ADMIN_URL}/login` : "http://localhost:3002/login"}
+              className="text-[#164772] hover:text-[#1BBA8B] font-medium px-4 py-2 transition-colors"
+            >
+              Sign In
+            </a>
+            <a
+              href={process.env.NEXT_PUBLIC_REGISTER_URL || "http://localhost:3003"}
+            >
+              <Button className="bg-[#1BBA8B] hover:bg-[#0ea574] px-6 py-2.5 font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg rounded-full">
+                Get Started
+                <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Button>
+            </a>
           </div>
 
           <button
@@ -111,9 +121,20 @@ export function Header() {
                 </button>
               ))}
               <div className="flex flex-col space-y-4 pt-6">
-                <Button className="bg-[#1BBA8B] hover:bg-[#0ea574] text-lg py-3 transition-all duration-300 hover:scale-105 rounded-full">
-                  Get Started
-                </Button>
+                <a
+                  href={process.env.NEXT_PUBLIC_ADMIN_URL ? `${process.env.NEXT_PUBLIC_ADMIN_URL}/login` : "http://localhost:3002/login"}
+                  className="text-center text-[#164772] font-medium py-2"
+                >
+                  Sign In
+                </a>
+                <a
+                  href={process.env.NEXT_PUBLIC_REGISTER_URL || "http://localhost:3003"}
+                  className="w-full"
+                >
+                  <Button className="w-full bg-[#1BBA8B] hover:bg-[#0ea574] text-lg py-3 transition-all duration-300 hover:scale-105 rounded-full">
+                    Get Started
+                  </Button>
+                </a>
               </div>
             </nav>
           </div>

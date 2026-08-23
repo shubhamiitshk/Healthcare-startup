@@ -12,7 +12,7 @@ const rawOrigins = process.env.CORS_ORIGINS;
 const isProd = (process.env.NODE_ENV ?? 'development') === 'production';
 const defaultOrigins = isProd
   ? []
-  : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'];
+  : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003'];
 const allowedOrigins = rawOrigins
   ? rawOrigins
       .split(',')

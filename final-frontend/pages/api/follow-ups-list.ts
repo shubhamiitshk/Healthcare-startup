@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
   if (req.method === 'GET') {
     const { patientId, clinicId } = req.query;
@@ -12,7 +12,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       url = `${apiUrl}/follow-ups/clinic/${clinicId}`;
     }
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: {
+          ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {}),
+        },
+      });
       const data = await response.json();
       if (!response.ok) {
         return res.status(response.status).json({ message: data.message || 'Failed to fetch follow-ups' });

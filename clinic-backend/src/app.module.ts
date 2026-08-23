@@ -12,6 +12,11 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { QueueModule } from './queue/queue.module';
 import { DoctorsModule } from './doctors/doctors.module';
 import { BedsModule } from './beds/beds.module';
+import { AiReceptionistModule } from './ai-receptionist/ai-receptionist.module';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { WhatsAppMessage } from './whatsapp/entities/whatsapp-message.entity';
+import { Invoice } from './entities/invoice.entity';
+import { BillingModule } from './billing/billing.module';
 import { Clinic } from './entities/clinic.entity';
 import { Doctor } from './entities/doctor.entity';
 import { DoctorSchedule } from './entities/doctor-schedule.entity';
@@ -45,10 +50,15 @@ import { BedEquipment } from './entities/bed-equipment.entity';
           Bed,
           BedAllocation,
           BedEquipment,
+          WhatsAppMessage,
+          Invoice,
         ],
         autoLoadEntities: true,
         synchronize: false,
-        ssl: { rejectUnauthorized: false },
+        ssl:
+          cfg.get<string>('DB_SSL') === 'true'
+            ? { rejectUnauthorized: false }
+            : false,
         extra: {
           max: 20,
           connectionTimeoutMillis: 10000,
@@ -72,6 +82,8 @@ import { BedEquipment } from './entities/bed-equipment.entity';
       Bed,
       BedAllocation,
       BedEquipment,
+      WhatsAppMessage,
+      Invoice,
     ]),
     GatewayModule,
     AuthModule,
@@ -81,6 +93,9 @@ import { BedEquipment } from './entities/bed-equipment.entity';
     QueueModule,
     DoctorsModule,
     BedsModule,
+    AiReceptionistModule,
+    WhatsappModule,
+    BillingModule,
   ],
   controllers: [],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

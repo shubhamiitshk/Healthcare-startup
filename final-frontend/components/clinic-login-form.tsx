@@ -4,9 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/components/auth-provider';
 
 export function ClinicLoginForm() {
   const router = useRouter();
+  const { login } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
@@ -26,37 +28,26 @@ export function ClinicLoginForm() {
     setIsLoading(true);
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
-      const response = await fetch(`${API_URL}/clinics/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Login failed');
+      const success = await login(formData.email, formData.password);
+      if (success) {
+        toast({
+          title: 'Login Successful',
+          description: 'Welcome back!',
+        });
+        router.push('/dashboard');
+      } else {
+        toast({
+          title: 'Login Failed',
+          description: 'Please check your credentials and try again.',
+          variant: 'destructive',
+        });
       }
-
-      // Store the token in localStorage
-      localStorage.setItem('clinicToken', data.data.token);
-      localStorage.setItem('clinicData', JSON.stringify(data.data.clinic));
-
-      toast({
-        title: 'Login Successful',
-        description: 'Welcome back!',
-      });
-
-      router.push('/dashboard');
     } catch (error) {
-        if (error instanceof Error) {
-          alert(error.message);
-        } else {
-          alert('An unknown error occurred');
-        };
+      toast({
+        title: 'Login Error',
+        description: error instanceof Error ? error.message : 'An unknown error occurred',
+        variant: 'destructive',
+      });
     } finally {
       setIsLoading(false);
     }

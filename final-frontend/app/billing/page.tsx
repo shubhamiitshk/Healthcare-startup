@@ -71,17 +71,21 @@ export default function BillingPage() {
     setPatients(Object.values(unique));
   }, [bills]);
 
-  // Fetch schedules for the clinic
+  // Fetch schedules for the clinic (via /doctors, which embeds schedules)
   useEffect(() => {
     const fetchSchedules = async () => {
       if (!user || !clinic) return;
       try {
         const token = await user.getIdToken();
-        const resp = await fetch(`${API_URL}/doctors/schedules?clinicId=${clinic.id}`,
+        const resp = await fetch(`${API_URL}/doctors`,
           { headers: { Authorization: `Bearer ${token}` } });
         if (resp.ok) {
           const data = await resp.json();
-          setSchedules(Array.isArray(data.data) ? data.data : []);
+          const docs = Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [];
+          const flat = docs.flatMap((d: any) =>
+            (d.schedules || []).map((s: any) => ({ ...s, doctorId: d.id, doctorName: d.name }))
+          );
+          setSchedules(flat);
         }
       } catch (e) {
         // ignore
@@ -131,23 +135,54 @@ export default function BillingPage() {
       const token = await user.getIdToken();
       const params = new URLSearchParams();
       if (selectedDoctor !== "all") params.append("doctorId", selectedDoctor);
-      if (date) params.append("date", format(date, "yyyy-MM-dd"));
-      const resp = await fetch(`${API_URL}/appointments/clinic?${params.toString()}`,
-        { headers: { Authorization: `Bearer ${token}` } });
-      const data = await resp.json();
-      console.log('Billing API response:', data); // DEBUG
-      if (Array.isArray(data.data) && data.data.length > 0) {
-        console.log('First item in data.data:', data.data[0]);
+      if (date) {
+        params.append("date", format(date, "yyyy-MM-dd"));
+        params.set("invoiceDate", format(date, "yyyy-MM-dd"));
       }
-      let mapped: Bill[] = [];
-      if (resp.ok) {
-        // unwrap either data.data or raw data array
-        const appts = Array.isArray(data.data)
-          ? data.data
-          : Array.isArray(data)
-            ? data
-            : [];
-        mapped = appts.map((a: any) => {
+      const [apptResp, invResp] = await Promise.all([
+        fetch(`${API_URL}/appointments/clinic?${params.toString()}`,
+          { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_URL}/invoices?${date ? `date=${format(date, "yyyy-MM-dd")}` : ""}`,
+          { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      const apptData = await apptResp.json();
+      let invoices: any[] = [];
+      if (invResp.ok) {
+        const invJson = await invResp.json();
+        invoices = Array.isArray(invJson.data) ? invJson.data : Array.isArray(invJson) ? invJson : [];
+      }
+
+      const appts = Array.isArray(apptData.data)
+        ? apptData.data
+        : Array.isArray(apptData)
+          ? apptData
+          : [];
+      const invoiceRows: Bill[] = invoices.map((inv: any) => ({
+        id: inv.id,
+        patientId: inv.patient?.id || inv.patientId || undefined,
+        patientName: inv.patient?.fullName || 'Unknown',
+        phone: inv.patient?.phone_number || '-',
+        sex: inv.patient?.gender || '-',
+        doctor: '-',
+        date: inv.date,
+        amount: Number(inv.amount) - Number(inv.discount ?? 0),
+        status: String(inv.status).toLowerCase() === 'paid' ? 'Paid' : 'Unpaid',
+        details: inv.notes || '-',
+        paymentMode: inv.paymentMode
+          ? inv.paymentMode.charAt(0).toUpperCase() + inv.paymentMode.slice(1)
+          : 'Cash',
+        discount: Number(inv.discount ?? 0),
+        notes: inv.notes || '',
+        clinicName: clinic.name,
+        clinicAddress: clinic.address,
+      }));
+      const linkedApptIds = new Set(
+        invoices.map((inv: any) => inv.appointmentId).filter(Boolean)
+      );
+
+      const mapped = appts
+        .filter((a: any) => !linkedApptIds.has(a.id))
+        .map((a: any) => {
           // Fallback mapping for flat appointment objects
           // prefer nested patient/familyMember objects before falling back to flat fields
           let patientName = a.patient?.fullName
@@ -200,8 +235,7 @@ export default function BillingPage() {
             clinicAddress,
           };
         });
-      }
-      setBills(mapped);
+      setBills([...invoiceRows, ...mapped]);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -232,14 +266,20 @@ export default function BillingPage() {
     setError(null);
     try {
       const token = await user?.getIdToken?.();
-      const resp = await fetch(`${API_URL}/appointments/${bill.id}/status`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ status: "completed" }),
-      });
+      const isInvoice = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bill.id) && bill.queueNo === undefined;
+      const resp = isInvoice
+        ? await fetch(`${API_URL}/invoices/${bill.id}/pay`, {
+            method: "PATCH",
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        : await fetch(`${API_URL}/appointments/${bill.id}/status`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ status: "completed" }),
+          });
       if (!resp.ok) throw new Error("Failed to mark as paid");
       setBills(bills => bills.map(b => b.id === bill.id ? { ...b, status: "Paid" } : b));
     } catch (e: any) {
@@ -276,8 +316,8 @@ export default function BillingPage() {
     setError(null);
     try {
       const token = await user?.getIdToken?.();
-      // Simulate bill as appointment (minimal fields)
-      const resp = await fetch(`${API_URL}/appointments/book`, {
+      const modeMap: Record<string, string> = { Cash: "cash", Card: "card", UPI: "upi", Other: "netbanking" };
+      const resp = await fetch(`${API_URL}/invoices`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -285,18 +325,15 @@ export default function BillingPage() {
         },
         body: JSON.stringify({
           patientId: data.patientId,
-          scheduleId: data.scheduleId,
           date: new Date().toISOString().slice(0, 10),
-          fees: data.amount,
-          notes: data.details,
-          paymentMode: data.paymentMode,
+          amount: data.amount,
           discount: data.discount,
-          extraNotes: data.notes,
+          paymentMode: modeMap[data.paymentMode] ?? "cash",
+          status: "paid",
+          notes: [data.details, data.notes].filter(Boolean).join(" | "),
         }),
       });
       if (!resp.ok) throw new Error("Failed to generate bill");
-      // Optionally, you can fetch the patient name and other details if needed
-      // For now, just refresh bills
       fetchBills();
       setShowGenerate(false);
     } catch (e: any) {
