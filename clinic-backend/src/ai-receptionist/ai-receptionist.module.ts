@@ -9,6 +9,7 @@ import { Patient } from '../entities/patient.entity';
 import { Doctor } from '../entities/doctor.entity';
 import { DoctorSchedule } from '../entities/doctor-schedule.entity';
 import { AppointmentsModule } from '../appointments/appointments.module';
+import { VoiceStreamGateway } from './voice-stream.gateway';
 
 @Module({
   imports: [
@@ -16,7 +17,19 @@ import { AppointmentsModule } from '../appointments/appointments.module';
     AppointmentsModule,
   ],
   controllers: [AiReceptionistController],
-  providers: [AiReceptionistService, SttService, LlmService, TtsService],
-  exports: [AiReceptionistService, SttService, LlmService, TtsService],
+  providers: [
+    AiReceptionistService,
+    SttService,
+    LlmService,
+    TtsService,
+    VoiceStreamGateway,
+  ],
+  exports: [
+    AiReceptionistService,
+    SttService,
+    LlmService,
+    TtsService,
+    VoiceStreamGateway,
+  ],
 })
 export class AiReceptionistModule {}

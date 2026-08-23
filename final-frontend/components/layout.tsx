@@ -5,7 +5,7 @@ import type React from "react"
 import { useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { LayoutDashboard, Users, UserCheck, Calendar, Settings, LogOut, Menu, X } from "lucide-react"
+import { LayoutDashboard, Users, UserCheck, Calendar, Settings, LogOut, Menu, X, Bot, CreditCard } from "lucide-react"
 import { auth } from "@/firebase";
 
 interface LayoutProps {
@@ -56,8 +56,14 @@ export default function Layout({ children }: LayoutProps) {
     {
       name: "Billing",
       href: "/billing",
-      icon: Calendar, // You can replace with a billing/invoice icon if available
+      icon: CreditCard,
       current: pathname === "/billing",
+    },
+    {
+      name: "AI Receptionist",
+      href: "/ai-receptionist",
+      icon: Bot,
+      current: pathname === "/ai-receptionist",
     },
     {
       name: "Settings",
