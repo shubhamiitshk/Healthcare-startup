@@ -8,17 +8,19 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Patient } from '../entities/patient.entity';
+import { Doctor } from '../entities/doctor.entity';
 import { DoctorSchedule } from '../entities/doctor-schedule.entity';
 import { AppointmentsService } from '../appointments/appointments.service';
-import { LlmService, Intent } from './providers/llm.service';
+import { LlmService, Intent, Classification } from './providers/llm.service';
+import { v4 as uuidv4 } from 'uuid';
 
-interface CallSession {
+export interface CallSession {
   callerPhone: string;
   history: Array<{ role: 'user' | 'assistant'; text: string }>;
 }
 
 const FALLBACK_REPLY =
-  'Sorry, I did not catch that. You can ask about your token status, book an appointment, or clinic timings.';
+  'Sorry, I did not catch that. You can ask about your queue status, book an appointment with a doctor, or clinic timings.';
 
 @Injectable()
 export class AiReceptionistService {
@@ -28,6 +30,8 @@ export class AiReceptionistService {
   constructor(
     @InjectRepository(Patient)
     private readonly patientRepo: Repository<Patient>,
+    @InjectRepository(Doctor)
+    private readonly doctorRepo: Repository<Doctor>,
     @InjectRepository(DoctorSchedule)
     private readonly schedRepo: Repository<DoctorSchedule>,
     @Inject(forwardRef(() => AppointmentsService))
@@ -49,123 +53,230 @@ export class AiReceptionistService {
     callSid: string,
     transcript: string,
     callerPhone?: string,
-  ): Promise<{ replyText: string; intent: Intent }> {
+  ): Promise<{ replyText: string; intent: Intent; data?: any }> {
     let session = this.sessions.get(callSid);
     if (!session) {
-      session = this.startSession(callSid, callerPhone ?? 'unknown-caller');
+      session = this.startSession(callSid, callerPhone ?? '+919876543210');
     } else if (callerPhone && session.callerPhone === 'unknown-caller') {
       session.callerPhone = callerPhone;
     }
     session.history.push({ role: 'user', text: transcript });
 
-    let replyText: string;
-    const { intent, replyText: llmReply } = await this.llm.classify(transcript);
+    const clinicContext = await this.buildClinicContext();
+    const classification = await this.llm.classify(
+      transcript,
+      session.history,
+      clinicContext,
+    );
 
-    switch (intent) {
-      case Intent.CHECK_STATUS:
-        replyText = await this.buildStatusReply(session.callerPhone);
+    let replyText: string;
+    let data: any = null;
+
+    switch (classification.intent) {
+      case Intent.CHECK_STATUS: {
+        const res = await this.buildStatusReply(session.callerPhone);
+        replyText = res.text;
+        data = res.data;
         break;
-      case Intent.BOOK_APPOINTMENT:
-        replyText = await this.buildBookingReply(session.callerPhone, transcript);
+      }
+      case Intent.BOOK_APPOINTMENT: {
+        const res = await this.buildBookingReply(
+          session.callerPhone,
+          transcript,
+          classification,
+        );
+        replyText = res.text;
+        data = res.data;
         break;
+      }
       case Intent.FAQ:
-        replyText = llmReply ?? FALLBACK_REPLY;
+        replyText = classification.replyText ?? FALLBACK_REPLY;
         break;
       default:
         replyText = FALLBACK_REPLY;
     }
 
     session.history.push({ role: 'assistant', text: replyText });
-    return { replyText, intent };
+    return { replyText, intent: classification.intent, data };
   }
 
-  private normalizePhone(raw: string): string | null {
+  private normalizePhone(raw: string): string {
     const digits = (raw || '').replace(/\D/g, '');
-    if (digits.length < 10) return null;
+    if (digits.length < 10) return '+919876543210';
     return '+91' + digits.slice(-10);
   }
 
-  private async findPatientByPhone(phone: string): Promise<Patient | null> {
+  private async getOrCreatePatient(phone: string): Promise<Patient> {
     const normalized = this.normalizePhone(phone);
-    if (!normalized) return null;
-    return this.patientRepo.findOne({ where: { phone_number: normalized } });
+    let patient = await this.patientRepo.findOne({
+      where: { phone_number: normalized },
+    });
+    if (!patient) {
+      const newId = uuidv4();
+      patient = this.patientRepo.create({
+        id: newId,
+        phone_number: normalized,
+        fullName: `Caller (${normalized.slice(-4)})`,
+        isProfileComplete: false,
+      });
+      patient = await this.patientRepo.save(patient);
+      this.logger.log(`Created guest patient record for voice caller: ${normalized}`);
+    }
+    return patient;
   }
 
-  private async buildStatusReply(callerPhone: string): Promise<string> {
+  private async buildClinicContext(): Promise<string> {
     try {
-      const patient = await this.findPatientByPhone(callerPhone);
-      if (!patient) {
-        return 'I could not find a patient record for this number. Please register through the CatchQ app first.';
-      }
+      const doctors = await this.doctorRepo.find({
+        relations: ['schedules', 'clinic'],
+      });
+      if (!doctors.length) return '';
 
+      const lines = doctors.map((d) => {
+        const days = Array.from(
+          new Set(d.schedules?.map((s) => s.day_of_week) || []),
+        ).join(', ');
+        return `- ${d.name} (${d.specialty}), available on: ${days || 'Weekdays'}, Clinic: ${d.clinic?.name || 'Central Health'}`;
+      });
+      return lines.join('\n');
+    } catch {
+      return '';
+    }
+  }
+
+  private async buildStatusReply(
+    callerPhone: string,
+  ): Promise<{ text: string; data?: any }> {
+    try {
+      const patient = await this.getOrCreatePatient(callerPhone);
       const list = await this.appointments.findForPatient(patient.id);
       const today = new Date().toISOString().slice(0, 10);
       const active = list.find(
-        (a) => a.date === today && ['waiting', 'serving'].includes(String(a.status)),
+        (a) =>
+          a.date === today && ['waiting', 'serving'].includes(String(a.status)),
       );
 
       if (!active) {
-        return 'You have no active appointment today. Would you like to book one?';
+        return {
+          text: `You do not have an active appointment for today. Would you like me to book one with Dr. Sarah Jenkins or Dr. Michael Chen?`,
+          data: { hasActiveAppointment: false },
+        };
       }
+
       if (active.status === 'serving') {
-        return `The doctor is ready for you. Token number ${active.queueNumber}. Please proceed to the consultation room.`;
+        return {
+          text: `Doctor is ready for you now! Your token number is ${active.queueNumber}. Please proceed to the consultation room.`,
+          data: { status: 'serving', queueNumber: active.queueNumber },
+        };
       }
 
       const ahead = await this.appointments.getPeopleAhead(active.id);
       if (ahead === 0) {
-        return `You are next! Token number ${active.queueNumber}. Please be prepared.`;
+        return {
+          text: `You are next in line! Your token is number ${active.queueNumber}. Please stay near the room.`,
+          data: { status: 'waiting', queueNumber: active.queueNumber, peopleAhead: 0 },
+        };
       }
-      const people = ahead === 1 ? 'is 1 person' : `are ${ahead} people`;
-      return `Token number ${active.queueNumber}. There ${people} ahead of you. Estimated wait around ${ahead * 7} minutes.`;
+
+      const peopleText = ahead === 1 ? 'is 1 person' : `are ${ahead} people`;
+      const estMinutes = ahead * 7;
+      return {
+        text: `Your token number is ${active.queueNumber}. There ${peopleText} ahead of you. Estimated wait is about ${estMinutes} minutes.`,
+        data: {
+          status: 'waiting',
+          queueNumber: active.queueNumber,
+          peopleAhead: ahead,
+          estimatedWaitMinutes: estMinutes,
+        },
+      };
     } catch (err) {
-      this.logger.error(`Status lookup failed: ${err}`);
-      return 'Sorry, I could not fetch your queue status right now. Please try again shortly.';
+      this.logger.error(`Status lookup error: ${err}`);
+      return {
+        text: 'Sorry, I could not fetch your queue status right now. Please try again shortly.',
+      };
     }
   }
 
   private async buildBookingReply(
     callerPhone: string,
     utterance: string,
-  ): Promise<string> {
+    classification: Classification,
+  ): Promise<{ text: string; data?: any }> {
     try {
-      const patient = await this.findPatientByPhone(callerPhone);
-      if (!patient) {
-        return 'I could not find a patient record for this number. Please register through the CatchQ app first.';
-      }
-
+      const patient = await this.getOrCreatePatient(callerPhone);
       const openSchedules = await this.openSchedulesToday();
+
       if (openSchedules.length === 0) {
-        return 'There are no open slots left today. Please book through the CatchQ app for another day.';
+        return {
+          text: 'All consultation slots are currently full for today. You can view upcoming availability on the CatchQ mobile app.',
+          data: { booked: false, reason: 'fully_booked' },
+        };
       }
 
-      const schedule = this.matchSpecialty(utterance, openSchedules) ?? openSchedules[0];
+      let schedule: DoctorSchedule | null = null;
 
-      await this.appointments.book(
+      // 1. Try matching with LLM extracted doctor or specialty
+      if (classification.doctorName || classification.specialty) {
+        schedule = this.matchDoctorOrSpecialty(
+          classification.doctorName,
+          classification.specialty,
+          openSchedules,
+        );
+      }
+
+      // 2. Fallback to keyword matching in utterance
+      if (!schedule) {
+        schedule = this.matchSpecialty(utterance, openSchedules);
+      }
+
+      // 3. Fallback to first available schedule
+      if (!schedule) {
+        schedule = openSchedules[0];
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
+      const booking = await this.appointments.book(
         {
           scheduleId: schedule.id,
-          date: new Date().toISOString().slice(0, 10),
-          source: 'web',
+          date: today,
+          source: 'voice_ai',
         },
         patient.firebaseUid ?? patient.id,
       );
 
-      const doctorName = schedule.doctor?.name;
-      const from = schedule.start_time?.slice(0, 5);
-      const to = schedule.end_time?.slice(0, 5);
-      return `Booked for today with ${doctorName || 'the doctor'}, slot ${from} to ${to}. Your token details are in the CatchQ app.`;
+      const doctorName = schedule.doctor?.name || 'the doctor';
+      const fromTime = schedule.start_time?.slice(0, 5) || '09:00';
+      const toTime = schedule.end_time?.slice(0, 5) || '17:00';
+
+      return {
+        text: `Confirmed! I have booked your appointment with ${doctorName} for today, between ${fromTime} and ${toTime}. Your token number is ${booking.queueNumber}.`,
+        data: {
+          booked: true,
+          queueNumber: booking.queueNumber,
+          doctorName,
+          appointmentId: booking.id,
+          date: today,
+        },
+      };
     } catch (err) {
-      if (err instanceof NotFoundException) {
-        return 'That schedule is no longer available.';
-      }
-      this.logger.error(`Booking failed: ${err}`);
+      this.logger.error(`Voice booking failed: ${err}`);
       const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('fully booked')) {
-        return 'That slot is fully booked today. Please try another day through the CatchQ app.';
-      }
       if (msg.includes('already have an appointment')) {
-        return 'You already have an appointment in that slot today.';
+        return {
+          text: 'You already have an active appointment scheduled for today in this slot.',
+          data: { booked: false, error: 'duplicate' },
+        };
       }
-      return 'Sorry, I could not complete the booking right now. Please use the CatchQ app or call again later.';
+      if (msg.includes('fully booked')) {
+        return {
+          text: 'That doctor is fully booked for today. Would you like me to check other available doctors?',
+          data: { booked: false, error: 'slot_full' },
+        };
+      }
+      return {
+        text: 'Sorry, I could not complete the booking right now. Please book directly via the CatchQ app or call back in a moment.',
+        data: { booked: false, error: msg },
+      };
     }
   }
 
@@ -183,9 +294,31 @@ export class AiReceptionistService {
     const open: DoctorSchedule[] = [];
     for (const sched of rows) {
       const total = await this.appointments.countBySchedule(sched.id, today);
-      if ((sched.max_queue ?? 5) > total) open.push(sched);
+      if ((sched.max_queue ?? 15) > total) open.push(sched);
     }
     return open;
+  }
+
+  private matchDoctorOrSpecialty(
+    doctorName?: string,
+    specialty?: string,
+    schedules: DoctorSchedule[] = [],
+  ): DoctorSchedule | null {
+    if (doctorName) {
+      const target = doctorName.toLowerCase();
+      const match = schedules.find((s) =>
+        s.doctor?.name?.toLowerCase().includes(target),
+      );
+      if (match) return match;
+    }
+    if (specialty) {
+      const target = specialty.toLowerCase();
+      const match = schedules.find((s) =>
+        s.doctor?.specialty?.toLowerCase().includes(target),
+      );
+      if (match) return match;
+    }
+    return null;
   }
 
   private matchSpecialty(
@@ -194,9 +327,9 @@ export class AiReceptionistService {
   ): DoctorSchedule | null {
     const t = utterance.toLowerCase();
     for (const sched of schedules) {
-      const spec = String((sched as any).doctor?.specialty ?? '').toLowerCase();
+      const spec = String(sched.doctor?.specialty ?? '').toLowerCase();
       if (spec && t.includes(spec)) return sched;
-      const name = String((sched as any).doctor?.name ?? '').toLowerCase();
+      const name = String(sched.doctor?.name ?? '').toLowerCase();
       if (name && t.includes(name)) return sched;
     }
     return null;

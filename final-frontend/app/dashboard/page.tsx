@@ -4,13 +4,14 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Users, Calendar, Clock, Activity, TrendingUp, UserCheck } from "lucide-react"
+import { Users, Calendar, Clock, Activity, TrendingUp, UserCheck, Bot, Sparkles } from "lucide-react"
 import Layout from "@/components/layout"
 import { useAuth } from "@/components/auth-provider"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ChartContainer } from "@/components/ui/chart"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts"
 import { BarChart, Bar, Legend } from "recharts"
+import { AiReceptionistModal } from "@/components/ai-receptionist-modal"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
 
@@ -50,6 +51,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [trendData, setTrendData] = useState<{ date: string; count: number }[]>([]);
   const [statusTrendData, setStatusTrendData] = useState<{ date: string; completed: number; waiting: number }[]>([]);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
 
   // Animated numbers
   const animatedPatients = useAnimatedNumber(stats.totalPatients);
@@ -194,6 +196,13 @@ export default function DashboardPage() {
 
   const quickActions = [
     {
+      title: "AI Voice Receptionist",
+      description: "Live Voice AI simulator (Twilio/Whisper/LLM)",
+      icon: Bot,
+      action: () => setAiModalOpen(true),
+      color: "bg-gradient-to-r from-[#164772] to-[#1BBA8D]",
+    },
+    {
       title: "Add Patient",
       description: "Add a new patient to queue",
       icon: Users,
@@ -233,9 +242,19 @@ export default function DashboardPage() {
         }
       `}</style>
       <div className="p-6">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-[#164772]">Dashboard</h1>
-          <p className="text-gray-600 mt-2">Welcome back! Here&apos;s what&apos;s happening today.</p>
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-[#164772]">Dashboard</h1>
+            <p className="text-gray-600 mt-2">Welcome back! Here&apos;s what&apos;s happening today.</p>
+          </div>
+          <Button
+            onClick={() => setAiModalOpen(true)}
+            className="bg-gradient-to-r from-[#164772] to-[#1BBA8D] hover:opacity-90 text-white shadow-md flex items-center gap-2 h-11 px-5 rounded-xl font-medium"
+          >
+            <Bot className="w-5 h-5" />
+            <span>Test AI Receptionist</span>
+            <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+          </Button>
         </div>
 
         {/* Stats Grid */}
@@ -363,6 +382,8 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <AiReceptionistModal open={aiModalOpen} onOpenChange={setAiModalOpen} />
     </Layout>
   );
 }

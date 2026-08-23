@@ -11,29 +11,57 @@ export class SttService {
     return Boolean(this.config.get<string>('OPENAI_API_KEY'));
   }
 
-  async transcribe(audio: Buffer, mimeType = 'audio/wav'): Promise<string> {
+  async transcribe(
+    audio: Buffer,
+    mimeType = 'audio/wav',
+    filename = 'call.wav',
+    language?: string,
+  ): Promise<string> {
     const apiKey = this.config.get<string>('OPENAI_API_KEY');
+    if (!apiKey) {
+      this.logger.warn('OPENAI_API_KEY not set; returning empty transcript');
+      return '';
+    }
+
     const form = new FormData();
     form.append(
       'file',
       new Blob([new Uint8Array(audio)], { type: mimeType }),
-      'call.wav',
+      filename,
     );
     form.append('model', 'whisper-1');
-
-    const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}` },
-      body: form,
-    });
-
-    if (!res.ok) {
-      const body = await res.text();
-      this.logger.error(`Whisper transcription failed (${res.status}): ${body}`);
-      throw new Error('STT_FAILED');
+    if (language) {
+      form.append('language', language);
     }
 
-    const data = (await res.json()) as { text?: string };
-    return (data.text ?? '').trim();
+    try {
+      const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: form,
+      });
+
+      if (!res.ok) {
+        const body = await res.text();
+        this.logger.error(`Whisper transcription failed (${res.status}): ${body}`);
+        return '';
+      }
+
+      const data = (await res.json()) as { text?: string };
+      return (data.text ?? '').trim();
+    } catch (err) {
+      this.logger.error(`Whisper STT request error: ${err}`);
+      return '';
+    }
+  }
+
+  async transcribeBase64(
+    base64Audio: string,
+    mimeType = 'audio/wav',
+    language?: string,
+  ): Promise<string> {
+    const cleanBase64 = base64Audio.replace(/^data:audio\/\w+;base64,/, '');
+    const buffer = Buffer.from(cleanBase64, 'base64');
+    return this.transcribe(buffer, mimeType, 'recording.wav', language);
   }
 }
