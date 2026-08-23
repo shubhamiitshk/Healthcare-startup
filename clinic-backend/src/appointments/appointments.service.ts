@@ -103,7 +103,7 @@ export class AppointmentsService {
       relations: ['patient', 'familyMember'],
     });
     if (fullAppointment) {
-      this.gateway.server.emit('status-update', fullAppointment);
+      this.gateway.server?.emit('status-update', fullAppointment);
     }
 
     const totalQueue = await this.countBySchedule(dto.scheduleId, dto.date);
@@ -111,7 +111,7 @@ export class AppointmentsService {
       dto.scheduleId,
       dto.date,
     );
-    this.gateway.server.emit(`queue-updated-${dto.scheduleId}-${dto.date}`, {
+    this.gateway.server?.emit(`queue-updated-${dto.scheduleId}-${dto.date}`, {
       totalQueue,
       currentServing,
     });
@@ -282,7 +282,7 @@ export class AppointmentsService {
 
     for (const waiting of waitingAppointments) {
       const peopleAhead = await this.getPeopleAhead(waiting.id);
-      this.gateway.server.emit(`queue-position-updated-${waiting.id}`, {
+      this.gateway.server?.emit(`queue-position-updated-${waiting.id}`, {
         appointmentId: waiting.id,
         peopleAhead,
       });
@@ -296,7 +296,7 @@ export class AppointmentsService {
       saved.schedule.id,
       saved.date,
     );
-    this.gateway.server.emit(
+    this.gateway.server?.emit(
       `queue-updated-${saved.schedule.id}-${saved.date}`,
       { totalQueue, currentServing },
     );

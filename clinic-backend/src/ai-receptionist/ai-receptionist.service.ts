@@ -173,7 +173,10 @@ export class AiReceptionistService {
     const todayDow = new Date().toLocaleDateString('en-US', { weekday: 'long' });
     const today = new Date().toISOString().slice(0, 10);
     const rows = await this.schedRepo.find({
-      where: { day_of_week: todayDow },
+      where: [
+        { day_of_week: todayDow },
+        { day_of_week: todayDow.toLowerCase() },
+      ],
       relations: ['doctor'],
     });
 

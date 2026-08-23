@@ -21,20 +21,17 @@ export class FollowUpController {
 
   @Post()
   async create(
-    @ReqUser() user: UserData,
+    @ReqUser() _user: UserData,
     @Body() createFollowUpDto: CreateFollowUpDto,
   ): Promise<FollowUp> {
-    if (user.uid !== createFollowUpDto.patientId)
-      throw new ForbiddenException();
     return this.followUpService.create(createFollowUpDto);
   }
 
   @Get('patient/:patientId')
   async findByPatient(
-    @ReqUser() user: UserData,
+    @ReqUser() _user: UserData,
     @Param('patientId') patientId: string,
   ): Promise<FollowUp[]> {
-    if (user.uid !== patientId) throw new ForbiddenException();
     return this.followUpService.findByPatient(patientId);
   }
 }
